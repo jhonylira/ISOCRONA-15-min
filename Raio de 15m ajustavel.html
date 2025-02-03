@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Mapa com Isócrona, Raio e Controles</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="https://api.mapbox.com/mapbox-gl-js/v2.10.0/mapbox-gl.js"></script>
+    <link href="https://api.mapbox.com/mapbox-gl-js/v2.10.0/mapbox-gl.css" rel="stylesheet" />
+    <style>
+        body { margin: 0; padding: 0; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+        .map-controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            z-index: 1;
+        }
+        .map-controls label {
+            display: block;
+            margin: 5px 0;
+        }
+        .map-controls input[type="range"] {
+            width: 150px;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div class="map-controls">
+        <label>
+            <input type="radio" name="map-style" value="streets" checked> Streets
+        </label>
+        <label>
+            <input type="radio" name="map-style" value="satellite"> Satellite
+        </label>
+        <hr>
+        <label>
+            Tempo (minutos): <span id="time-value">15</span>
+            <input type="range" id="time-slider" min="15" max="30" value="15">
+        </label>
+    </div>
+    <script>
+        // Substitua pelo seu token de acesso do Mapbox
+        mapboxgl.accessToken = 'pk.eyJ1IjoiYXJxamhvbnlsaXJhIiwiYSI6ImNtMDVtM3plYzBkeDcybG9oMmt1cHdrNWsifQ.1zZtn2H7Z9omfLIdqXykNw';
+
+        // Coordenada central
+        const center = [-49.24382011056316, -26.430824903053576];
+
+        // Inicializa o mapa
+        const map = new mapboxgl.Map({
+            container: 'map',
+            style: 'mapbox://styles/mapbox/streets-v11',
+            center: center,
+            zoom: 14
+        });
+
+        // Adiciona um marcador no ponto central
+        new mapboxgl.Marker().setLngLat(center).addTo(map);
+
+        // Adiciona um círculo de 15 metros ao redor do ponto central
+        map.on('load', () => {
+            map.addLayer({
+                id: 'radius-circle',
+                type: 'circle',
+                source: {
+                    type: 'geojson',
+                    data: {
+                        type: 'Feature',
+                        geometry: {
+                            type: 'Point',
+                            coordinates: center
+                        }
+                    }
+                },
+                paint: {
+                    'circle-radius': {
+                        stops: [
+                            [0, 0],
+                            [20, 15] // 15 metros de raio
+                        ],
+                        base: 2
+                    },
+                    'circle-color': '#FF0000',
+                    'circle-opacity': 0.5
+                }
+            });
+
+            // Carrega a isócrona inicial
+            fetchIsochrone(15);
+        });
+
+        // Função para buscar a isócrona
+        async function fetchIsochrone(minutes) {
+            const profile = 'walking'; // Perfil de deslocamento (walking, driving, cycling)
+            const url = `https://api.mapbox.com/isochrone/v1/mapbox/${profile}/${center[0]},${center[1]}?contours_minutes=${minutes}&polygons=true&access_token=${mapboxgl.accessToken}`;
+
+            const response = await fetch(url);
+            const data = await response.json();
+
+            // Remove a camada de isócrona existente, se houver
+            if (map.getLayer('isochrone')) {
+                map.removeLayer('isochrone');
+                map.removeSource('isochrone');
+            }
+
+            // Adiciona a nova isócrona ao mapa
+            map.addLayer({
+                id: 'isochrone',
+                type: 'fill',
+                source: {
+                    type: 'geojson',
+                    data: data
+                },
+                paint: {
+                    'fill-color': '#00FF00',
+                    'fill-opacity': 0.3
+                }
+            });
+        }
+
+        // Controles de estilo do mapa
+        document.querySelectorAll('input[name="map-style"]').forEach((input) => {
+            input.addEventListener('change', (e) => {
+                const style = e.target.value === 'satellite' ? 'mapbox://styles/mapbox/satellite-v9' : 'mapbox://styles/mapbox/streets-v11';
+                map.setStyle(style);
+            });
+        });
+
+        // Controle do slider
+        const timeSlider = document.getElementById('time-slider');
+        const timeValue = document.getElementById('time-value');
+
+        timeSlider.addEventListener('input', (e) => {
+            const minutes = parseInt(e.target.value);
+            timeValue.textContent = minutes;
+            fetchIsochrone(minutes);
+        });
+    </script>
+</body>
+</html>
